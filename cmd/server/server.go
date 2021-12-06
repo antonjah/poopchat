@@ -8,7 +8,7 @@ import (
 	"net/http"
 )
 
-var address = flag.String("address", "0.0.0.0:8080", "listen bind address")
+var address = flag.String("address", ":8080", "listen bind address")
 
 func main() {
 	flag.Parse()

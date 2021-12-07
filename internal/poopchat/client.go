@@ -1,12 +1,9 @@
 package poopchat
 
 import (
-	"bytes"
 	"context"
-	"fmt"
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
-	"net"
 	"net/http"
 	"time"
 )
@@ -20,9 +17,8 @@ const (
 )
 
 var (
-	newline        = []byte{'\n'}
-	space          = []byte{' '}
-	welcomeMessage = "Welcome to poopchat, %s!"
+	newline = []byte{'\n'}
+	space   = []byte{' '}
 )
 
 var upgrader = websocket.Upgrader{
@@ -33,18 +29,17 @@ var upgrader = websocket.Upgrader{
 // Client is a middleman between the websocket connection and the server.
 type Client struct {
 	sessionID string
-	user      string
 	server    *Server
 	conn      *websocket.Conn
 	send      chan []byte
 }
 
 func (c *Client) WriteWelcomeMessage() error {
-	return c.conn.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf(welcomeMessage, c.user)))
+	return c.conn.WriteMessage(websocket.TextMessage, []byte("Welcome to poopchat!"))
 }
 
 func (c *Client) Read(ctx context.Context) {
-	logger := ctx.Value(SessionLoggerKey).(*log.Entry).WithField("user", c.user)
+	logger := ctx.Value(SessionLoggerKey).(*log.Entry)
 
 	defer func() {
 		c.server.unregister <- c
@@ -70,15 +65,12 @@ func (c *Client) Read(ctx context.Context) {
 			}
 			break
 		}
-		buf := []byte(fmt.Sprintf("%s: ", c.user))
-		message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
-		buf = append(buf, message...)
-		c.server.broadcast <- buf
+		c.server.broadcast <- message
 	}
 }
 
 func (c *Client) Write(ctx context.Context) {
-	logger := ctx.Value(SessionLoggerKey).(*log.Entry).WithField("user", c.user)
+	logger := ctx.Value(SessionLoggerKey).(*log.Entry)
 
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
@@ -132,24 +124,18 @@ func Serve(server *Server, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var user = ""
-	if user, _, err = net.SplitHostPort(r.RemoteAddr); err != nil {
-		logger.WithError(err).Debug("Failed to get user IP")
-	}
-
-	logger = logger.WithField("user", user)
-
 	sessionID, ok := r.Context().Value(SessionIDKey).(string)
 	if !ok {
 		logger.Error("Failed to read session ID")
 	}
 
-	client := &Client{sessionID: sessionID, user: user, server: server, conn: conn, send: make(chan []byte, 256)}
+	client := &Client{sessionID: sessionID, server: server, conn: conn, send: make(chan []byte, 256)}
 	client.server.register <- client
+
+	logger.Info("Session registered")
+
 	if err = client.WriteWelcomeMessage(); err != nil {
 		logger.WithError(err).Error("Failed to post welcome message")
-	} else {
-		logger.Info("Session registered")
 	}
 
 	go client.Write(r.Context())

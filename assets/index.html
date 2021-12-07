@@ -7,6 +7,7 @@
             let conn;
             let msg = document.getElementById("msg");
             let log = document.getElementById("log");
+            let username = document.getElementById("username")
 
             function appendLog(item) {
                 let doScroll = log.scrollTop > log.scrollHeight - log.clientHeight - 1;
@@ -23,9 +24,9 @@
                 if (!msg.value) {
                     return false;
                 }
-                conn.send(msg.value);
+                conn.send(username.value + ": " + msg.value);
                 msg.value = "";
-                msg.focus()
+                msg.focus();
                 return false;
             };
 
@@ -94,9 +95,10 @@
 </head>
 <body>
 <div id="log"></div>
-<form id="form">
-    <input type="submit" value="💩" />
-    <input type="text" id="msg" size="128" autofocus/>
+<form id="form" autocomplete="off">
+    <input type="text" id="msg" size="128" placeholder="Message" autofocus/>
+    <input type="text" id="username" size="12" placeholder="Username" required/>
+    <input type="submit" value="Send"/>
 </form>
 </body>
 </html>

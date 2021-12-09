@@ -20,6 +20,10 @@ var (
 	cmdHelp = regexp.MustCompile(`(?i)^/help`)
 )
 
+var (
+	help = []byte("/help - show help\n/name <new-name> - change your username")
+)
+
 const (
 	writeWait      = 10 * time.Second
 	pongWait       = 60 * time.Second
@@ -87,7 +91,7 @@ func (c *Client) Read(ctx context.Context) {
 				c.username = user
 				continue
 			case cmdHelp.MatchString(strMessage):
-				logger.Info("Received help command")
+				c.conn.WriteMessage(websocket.TextMessage, help)
 				continue
 			}
 		}

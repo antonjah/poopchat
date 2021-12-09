@@ -2,10 +2,22 @@ package poopchat
 
 import (
 	"context"
+	"fmt"
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
 	"net/http"
+	"regexp"
 	"time"
+)
+
+var (
+	userPrefix = ": "
+	cmdPrefix  = "/"
+)
+
+var (
+	cmdName = regexp.MustCompile(`(?i)^/name (.*)`)
+	cmdHelp = regexp.MustCompile(`(?i)^/help`)
 )
 
 const (
@@ -28,20 +40,18 @@ var upgrader = websocket.Upgrader{
 
 // Client is a middleman between the websocket connection and the server.
 type Client struct {
+	username  username
 	sessionID string
 	server    *Server
 	conn      *websocket.Conn
 	send      chan []byte
 }
 
-func (c *Client) WriteWelcomeMessage() error {
-	return c.conn.WriteMessage(websocket.TextMessage, []byte("Welcome to poopchat!"))
-}
-
 func (c *Client) Read(ctx context.Context) {
 	logger := ctx.Value(SessionLoggerKey).(*log.Entry)
 
 	defer func() {
+		c.server.broadcast <- []byte(fmt.Sprintf("--- %s left ---", c.username.string()))
 		c.server.unregister <- c
 		c.conn.Close()
 		logger.Info("Session closed")
@@ -54,18 +64,37 @@ func (c *Client) Read(ctx context.Context) {
 		})
 	for {
 		messageType, message, err := c.conn.ReadMessage()
-		switch messageType {
-		case websocket.TextMessage:
-			logger.Info("Received text message")
-		}
-
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				logger.WithError(err).Error("Socket read error")
 			}
 			break
 		}
-		c.server.broadcast <- message
+
+		switch messageType {
+		case websocket.TextMessage:
+			logger.Info("Received text message")
+
+			strMessage := string(message)
+			switch {
+			case cmdName.MatchString(strMessage):
+				var user = username(cmdName.FindStringSubmatch(strMessage)[1])
+				if !user.valid() {
+					c.conn.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("poopbot: invalid username '%s'", user.string())))
+					continue
+				}
+				c.server.broadcast <- []byte(fmt.Sprintf("--- %s is now known as %s ---", c.username.string(), user.string()))
+				c.username = user
+				continue
+			case cmdHelp.MatchString(strMessage):
+				logger.Info("Received help command")
+				continue
+			}
+		}
+
+		msg := append(c.username.bytes(), ": "...)
+		msg = append(msg, message...)
+		c.server.broadcast <- msg
 	}
 }
 
@@ -129,14 +158,19 @@ func Serve(server *Server, w http.ResponseWriter, r *http.Request) {
 		logger.Error("Failed to read session ID")
 	}
 
-	client := &Client{sessionID: sessionID, server: server, conn: conn, send: make(chan []byte, 256)}
+	client := &Client{
+		username:  getRandomUsername(r.Context()),
+		sessionID: sessionID,
+		server:    server,
+		conn:      conn,
+		send:      make(chan []byte, 256),
+	}
+
 	client.server.register <- client
 
 	logger.Info("Session registered")
 
-	if err = client.WriteWelcomeMessage(); err != nil {
-		logger.WithError(err).Error("Failed to post welcome message")
-	}
+	server.broadcast <- []byte(fmt.Sprintf("--- %s joined ---", client.username.string()))
 
 	go client.Write(r.Context())
 	go client.Read(r.Context())

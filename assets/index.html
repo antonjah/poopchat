@@ -7,7 +7,6 @@
             let conn;
             let msg = document.getElementById("msg");
             let log = document.getElementById("log");
-            let username = document.getElementById("username")
 
             function appendLog(item) {
                 let doScroll = log.scrollTop > log.scrollHeight - log.clientHeight - 1;
@@ -24,7 +23,7 @@
                 if (!msg.value) {
                     return false;
                 }
-                conn.send(username.value + ": " + msg.value);
+                conn.send(msg.value);
                 msg.value = "";
                 msg.focus();
                 return false;
@@ -34,7 +33,7 @@
                 conn = new WebSocket("ws://" + document.location.host + "/socket");
                 conn.onclose = function (evt) {
                     let item = document.createElement("div");
-                    item.innerHTML = "<b>Connection closed.</b>";
+                    item.innerHTML = "<b>--- connection closed ---</b>";
                     appendLog(item);
                 };
                 conn.onmessage = function (evt) {
@@ -47,7 +46,7 @@
                 };
             } else {
                 let item = document.createElement("div");
-                item.innerHTML = "<b>Your browser does not support WebSockets.</b>";
+                item.innerHTML = "<b>--- your browser does not support WebSockets ---</b>";
                 appendLog(item);
             }
         };
@@ -97,7 +96,6 @@
 <div id="log"></div>
 <form id="form" autocomplete="off">
     <input type="text" id="msg" size="128" placeholder="Message" autofocus/>
-    <input type="text" id="username" size="12" placeholder="Username" required/>
     <input type="submit" value="Send"/>
 </form>
 </body>
